@@ -99,6 +99,23 @@ describe("Schema.parse and asSchema", () => {
   it.each([
     [{ entities: [{ description: "no name" }] }, "entities[0].name: field required"],
     [{ entities: [{ name: "Person" }, { name: "person" }] }, "entities[1].name: duplicate entity type 'person'"],
+    [
+      { entities: [{ name: "Person" }, { name: "Company", aliases: ["Person"] }] },
+      "entities[1].aliases[0]: 'Person' is already a name or alias of entity type 'Person'",
+    ],
+    [
+      { entities: [{ name: "Company", aliases: ["person"] }, { name: "Person" }] },
+      "entities[0].aliases[0]: 'person' is already a name or alias of entity type 'Person'",
+    ],
+    [
+      {
+        entities: [
+          { name: "Company", aliases: ["org"] },
+          { name: "Team", aliases: ["Org"] },
+        ],
+      },
+      "entities[1].aliases[0]: 'Org' is already a name or alias of entity type 'Company'",
+    ],
     [{ entities: [{ name: "A" }, { name: "B", parent: "X" }] }, "entities[1].parent: unknown type 'X'"],
     [
       {
@@ -122,6 +139,16 @@ describe("Schema.parse and asSchema", () => {
     ],
   ])("rejects %j", (spec, message) => {
     expect(() => asSchema(spec as Schema)).toThrow(new ValidationError(`invalid schema: ${message}`));
+  });
+
+  it("lets an alias repeat its own type name", () => {
+    const schema = asSchema({
+      entities: [
+        { name: "Person", aliases: ["person", "Human"] },
+        { name: "Company", aliases: ["org"] },
+      ],
+    });
+    expect(schema?.entities.map((e) => e.aliases)).toEqual([["person", "Human"], ["org"]]);
   });
 });
 

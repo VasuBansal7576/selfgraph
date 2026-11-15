@@ -115,17 +115,27 @@ class Schema(TopInputModel):
     def _check_consistency(self) -> "Schema":
         """Reject a schema whose types contradict each other, naming the first problem by its path.
 
-        Entity type names are compared ignoring case and relation types after normalization. A max_count must be
-        at least 1, a min_count at least 0, and a min_count no greater than the max_count on the same side.
+        Entity type names and aliases are compared ignoring case, and an entity alias may not name another type or
+        repeat another type's alias. Relation types are compared after normalization. A max_count must be at
+        least 1, a min_count at least 0, and a min_count no greater than the max_count on the same side.
 
-        @return (Schema): the schema; raises ValueError on a duplicate name, an unknown or cyclic parent, or an
-            impossible endpoint count.
+        @return (Schema): the schema; raises ValueError on a duplicate name, an alias of another type, an unknown
+            or cyclic parent, or an impossible endpoint count.
         """
         names: set[str] = set()
         for i, entity in enumerate(self.entities):
             if entity.name.casefold() in names:
                 raise ValueError(f"entities[{i}].name: duplicate entity type {entity.name!r}")
             names.add(entity.name.casefold())
+        owners = {entity.name.casefold(): i for i, entity in enumerate(self.entities)}
+        for i, entity in enumerate(self.entities):
+            for j, alias in enumerate(entity.aliases):
+                owner = owners.setdefault(alias.casefold(), i)
+                if owner != i:
+                    raise ValueError(
+                        f"entities[{i}].aliases[{j}]: {alias!r} is already a name or alias of entity type "
+                        f"{self.entities[owner].name!r}"
+                    )
         index = _entity_index(self)
         for i, entity in enumerate(self.entities):
             if entity.parent is None:

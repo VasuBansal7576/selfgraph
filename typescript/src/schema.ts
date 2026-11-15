@@ -205,10 +205,12 @@ export function entityIndex(schema: ParsedSchema): Map<string, ParsedEntityType>
 }
 
 /**
- * Find the first inconsistency in a schema: a duplicate type, an unknown or cyclic parent, or a bad count.
+ * Find the first inconsistency in a schema: a duplicate type, an alias of another type, an unknown or cyclic parent,
+ * or a bad count.
  *
- * Entity type names are compared ignoring case and relation types after normalization. A max_count must be at least
- * 1, a min_count at least 0, and a min_count no greater than the max_count on the same side.
+ * Entity type names and aliases are compared ignoring case, and an entity alias may not name another type or repeat
+ * another type's alias. Relation types are compared after normalization. A max_count must be at least 1, a
+ * min_count at least 0, and a min_count no greater than the max_count on the same side.
  *
  * @param schema (z.output<typeof SchemaObject>): the schema.
  * @return ([Array<string | number>, string] | null): the path and message of the first problem, or null.
@@ -220,6 +222,20 @@ function schemaProblem(schema: z.output<typeof SchemaObject>): [Array<string | n
       return [["entities", i, "name"], `duplicate entity type ${pyRepr(entity.name)}`];
     }
     names.add(casefold(entity.name));
+  }
+  const owners = new Map<string, number>(schema.entities.map((entity, i) => [casefold(entity.name), i]));
+  for (const [i, entity] of schema.entities.entries()) {
+    for (const [j, alias] of entity.aliases.entries()) {
+      const key = casefold(alias);
+      if (!owners.has(key)) owners.set(key, i);
+      const owner = owners.get(key) as number;
+      if (owner !== i) {
+        return [
+          ["entities", i, "aliases", j],
+          `${pyRepr(alias)} is already a name or alias of entity type ${pyRepr(schema.entities[owner]?.name)}`,
+        ];
+      }
+    }
   }
   const index = entityIndex(schema);
   for (const [i, entity] of schema.entities.entries()) {

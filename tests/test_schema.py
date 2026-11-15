@@ -201,6 +201,18 @@ def test_invalid_schema_and_mode_raise_validation_error():
     ("spec", "message"),
     [
         ({"entities": [{"name": "Person"}, {"name": "person"}]}, "entities[1].name: duplicate entity type 'person'"),
+        (
+            {"entities": [{"name": "Person"}, {"name": "Company", "aliases": ["Person"]}]},
+            "entities[1].aliases[0]: 'Person' is already a name or alias of entity type 'Person'",
+        ),
+        (
+            {"entities": [{"name": "Company", "aliases": ["person"]}, {"name": "Person"}]},
+            "entities[0].aliases[0]: 'person' is already a name or alias of entity type 'Person'",
+        ),
+        (
+            {"entities": [{"name": "Company", "aliases": ["org"]}, {"name": "Team", "aliases": ["Org"]}]},
+            "entities[1].aliases[0]: 'Org' is already a name or alias of entity type 'Company'",
+        ),
         ({"entities": [{"name": "A"}, {"name": "B", "parent": "X"}]}, "entities[1].parent: unknown type 'X'"),
         (
             {"entities": [{"name": "A", "parent": "B"}, {"name": "B", "parent": "A"}]},
@@ -226,6 +238,15 @@ def test_inconsistent_schemas_are_rejected_with_a_path(spec, message):
     with pytest.raises(ValidationError) as direct:
         Schema(**spec)
     assert str(direct.value) == f"invalid schema: {message}"
+
+
+def test_an_alias_may_repeat_its_own_type_name():
+    schema = as_schema(
+        {
+            "entities": [{"name": "Person", "aliases": ["person", "Human"]}, {"name": "Company", "aliases": ["org"]}],
+        }
+    )
+    assert [e.aliases for e in schema.entities] == [["person", "Human"], ["org"]]
 
 
 def test_models_built_directly_raise_the_sdk_validation_error():
